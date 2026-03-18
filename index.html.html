@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CGD → hledger</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#e8e6e1;background:#141412;padding:2rem 1rem;min-height:100vh}
+.container{max-width:740px;margin:0 auto}
+
+/* Header */
+.header{display:flex;align-items:baseline;gap:10px;margin-bottom:1.75rem}
+h1{font-size:17px;font-weight:600;color:#e8e6e1;letter-spacing:-0.01em}
+.header-sub{font-size:12px;color:#4a4945}
+
+/* Cards */
+.card{background:#1c1a18;border:1px solid #252320;border-radius:14px;padding:1.5rem;margin-bottom:1rem}
+
+/* Drop zone */
+.drop-zone{border:1.5px dashed #2e2c29;border-radius:10px;padding:3rem 1.5rem;text-align:center;cursor:pointer;transition:all 0.15s;position:relative}
+.drop-zone:hover,.drop-zone.drag-over{background:#1f1d1b;border-color:#4a4945}
+.drop-zone input{display:none}
+.drop-icon{font-size:28px;margin-bottom:10px;opacity:0.5}
+.drop-label{font-size:14px;color:#7a7872;margin-bottom:4px}
+.drop-sub{font-size:11px;color:#4a4945}
+
+/* Divider */
+.divider{display:flex;align-items:center;gap:10px;margin:1.25rem 0;color:#3a3835;font-size:11px}
+.divider::before,.divider::after{content:'';flex:1;border-top:1px solid #252320}
+
+/* Buttons */
+.btn{background:transparent;border:1px solid #2e2c29;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;color:#c8c6c1;transition:all 0.1s;font-family:inherit}
+.btn:hover{background:#232120;border-color:#3a3835}
+.btn-primary{background:#e8e6e1;color:#141412;border-color:#e8e6e1;font-weight:500}
+.btn-primary:hover{background:#d3d1c7;border-color:#d3d1c7}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-icon{padding:5px 8px;font-size:13px;line-height:1}
+
+/* Section labels */
+.section-label{font-size:10px;font-weight:600;color:#4a4945;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.85rem}
+
+/* Toolbar */
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap}
+
+/* Badges */
+.badge{font-size:11px;padding:3px 9px;border-radius:99px;background:#0b3d70;color:#6aadeb;font-weight:500}
+.badge-neutral{font-size:11px;padding:3px 9px;border-radius:99px;background:#252320;color:#7a7872;border:1px solid #2e2c29}
+.badge-success{font-size:11px;padding:3px 9px;border-radius:99px;background:#0f3020;color:#6ac47a}
+.badge-warn{font-size:11px;padding:3px 9px;border-radius:99px;background:#2e1f0a;color:#c9843a}
+
+/* Spinner */
+.spinner{display:inline-block;width:10px;height:10px;border:1.5px solid #3a3835;border-top-color:#7a7872;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Transaction list */
+.tx-list{display:flex;flex-direction:column;gap:5px}
+.tx-card{background:#1c1a18;border:1px solid #252320;border-radius:9px;padding:0.6rem 0.9rem;display:grid;grid-template-columns:90px 1fr auto 28px;gap:5px 8px;align-items:center;transition:border-color 0.15s,opacity 0.15s}
+.tx-card.approved{border-color:#1a4a2a;background:#171f18}
+.tx-date{font-size:11px;color:#4a4945;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.tx-amount{font-size:12px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;font-weight:500}
+.tx-amount.debit{color:#e07070}
+.tx-amount.credit{color:#8abe55}
+.tx-card.approved .tx-amount{opacity:0.45}
+.acct-btn{grid-column:2/5;display:flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid #252320;border-radius:7px;cursor:pointer;background:#222020;font-size:11px;color:#c8c6c1;transition:all 0.1s;text-align:left;width:100%}
+.acct-btn:hover{background:#2a2826;border-color:#3a3835}
+.acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.acct-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-chevron{font-size:9px;color:#4a4945;flex-shrink:0}
+/* Check button */
+.check-btn{grid-column:4/5;grid-row:1/2;width:26px;height:26px;border-radius:7px;border:1px solid #2e2c29;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3a3835;font-size:13px;transition:all 0.12s;flex-shrink:0;padding:0;align-self:center}
+.check-btn:hover{border-color:#4a6a4a;color:#5a8a5a;background:#1a2a1a}
+.check-btn.checked{border-color:#2a6a3a;background:#1a3a22;color:#6ac47a}
+.check-btn.checked:hover{background:#162e1c;border-color:#3a8a4a}
+/* Description editing */
+.tx-desc-wrap{min-width:0;display:flex;flex-direction:column;gap:2px}
+.tx-desc{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d8d6d1;cursor:text;border-radius:4px;padding:1px 3px;margin:-1px -3px;transition:background 0.1s}
+.tx-desc:hover{background:#252320}
+.tx-desc-input{font-size:12px;font-weight:500;color:#e8e6e1;background:#252320;border:1px solid #4a4945;border-radius:5px;padding:1px 5px;outline:none;width:100%;font-family:inherit}
+.tx-desc-orig{font-size:10px;color:#3a3835;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}
+.tx-desc-suggestion{font-size:10px;color:#5a7a9a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:4px}
+.tx-desc-suggestion:hover{color:#7aaada}
+.tx-desc-suggestion::before{content:'↩';font-style:normal;font-size:9px;opacity:0.7}
+.tx-desc-ambiguous{font-size:10px;color:#c9843a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx-card.approved .tx-desc{color:#7a8a7a}
+.tx-card.approved .tx-date{color:#3a4a3a}
+.tx-card.approved .tx-desc-orig{color:#2a3028}
+.tx-card.approved .tx-desc-suggestion{display:none}
+
+/* Picker */
+.picker-overlay{position:fixed;inset:0;z-index:100}
+.picker{position:fixed;z-index:101;background:#1c1a18;border:1px solid #2e2c29;border-radius:13px;box-shadow:0 12px 40px rgba(0,0,0,0.6);width:310px;max-height:420px;display:flex;flex-direction:column}
+.picker-search-wrap{padding:9px;border-bottom:1px solid #222020;flex-shrink:0}
+.picker-search{width:100%;padding:6px 10px;font-size:12px;border:1px solid #2e2c29;border-radius:8px;background:#222020;color:#e8e6e1;outline:none;font-family:inherit}
+.picker-search:focus{border-color:#4a4945}
+.picker-search::placeholder{color:#4a4945}
+.picker-list{overflow-y:auto;padding:4px}
+.picker-list::-webkit-scrollbar{width:4px}
+.picker-list::-webkit-scrollbar-track{background:transparent}
+.picker-list::-webkit-scrollbar-thumb{background:#2e2c29;border-radius:2px}
+.picker-group-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;padding:8px 8px 3px;color:#4a4945}
+.picker-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;color:#c8c6c1}
+.picker-item:hover,.picker-item.focused{background:#252320}
+.picker-item.selected{color:#e8e6e1;font-weight:600}
+.picker-icon{font-size:13px;width:20px;text-align:center;flex-shrink:0}
+.picker-empty{padding:20px;text-align:center;font-size:12px;color:#4a4945}
+.picker-acct{font-size:10px;max-width:115px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+
+/* Output */
+.output-wrap{position:relative}
+.output-box{background:#191714;border-radius:9px;padding:1.1rem;font-family:'JetBrains Mono','Fira Code','Courier New',monospace;font-size:11.5px;line-height:1.75;white-space:pre;overflow-x:auto;border:1px solid #252320;color:#a0a89a}
+.output-box::-webkit-scrollbar{height:4px}
+.output-box::-webkit-scrollbar-thumb{background:#2e2c29;border-radius:2px}
+.output-line-date{color:#6aadeb}
+.output-line-acct{color:#c8c6c1}
+.output-line-amount-debit{color:#e07070}
+.output-line-amount-credit{color:#8abe55}
+.output-line-source{color:#4a4945}
+
+/* Paste area */
+textarea{font-family:'JetBrains Mono','Fira Code','Courier New',monospace;font-size:11px;padding:10px;border:1px solid #2e2c29;border-radius:9px;background:#191714;color:#a0a89a;resize:vertical;width:100%;outline:none;font-family:inherit}
+textarea:focus{border-color:#4a4945}
+textarea::placeholder{color:#4a4945}
+
+/* Steps */
+.step{display:none}
+.step.active{display:block}
+
+/* mark */
+mark{background:transparent;font-weight:600;color:#e8e6e1}
+
+/* Stats bar */
+.stats-row{display:flex;gap:16px;padding:10px 12px;background:#191714;border-radius:9px;margin-bottom:1rem;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat-label{font-size:10px;color:#4a4945;text-transform:uppercase;letter-spacing:0.05em}
+.stat-value{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat-value.debit{color:#e07070}
+.stat-value.credit{color:#8abe55}
+.stat-value.neutral{color:#c8c6c1}
+/* Progress */
+.badge-progress{font-size:11px;padding:3px 9px;border-radius:99px;background:#1a3a22;color:#6ac47a;font-weight:500;border:1px solid #2a5a32}
+.badge-progress.zero{background:#252320;color:#4a4945;border-color:#2e2c29}
+
+/* Manual entries panel */
+.manual-panel{background:#191714;border:1px solid #252320;border-radius:10px;margin-top:1.25rem;overflow:hidden}
+.manual-form{display:grid;grid-template-columns:110px 1fr 110px;gap:7px;align-items:end;margin-bottom:10px}
+.manual-form-full{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}
+.field-label{font-size:10px;color:#4a4945;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
+.field-input{width:100%;padding:6px 9px;font-size:12px;border:1px solid #2e2c29;border-radius:7px;background:#222020;color:#e8e6e1;outline:none;font-family:inherit}
+.field-input:focus{border-color:#4a4945}
+.field-input::placeholder{color:#3a3835}
+/* Custom desc autocomplete */
+.desc-wrap{position:relative}
+.desc-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1c1a18;border:1px solid #3a3835;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:200;overflow:hidden;display:none}
+.desc-suggestions.open{display:block}
+.desc-suggestion-item{padding:7px 10px;font-size:12px;color:#c8c6c1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desc-suggestion-item:hover,.desc-suggestion-item.focused{background:#252320;color:#e8e6e1}
+.manual-list{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.manual-entry{background:#1c1a18;border:1px solid #252320;border-radius:8px;padding:8px 10px;display:grid;grid-template-columns:90px 1fr auto auto;gap:4px 10px;align-items:center}
+.manual-entry-date{font-size:11px;color:#4a4945;font-variant-numeric:tabular-nums}
+.manual-entry-desc{font-size:12px;font-weight:500;color:#d8d6d1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.manual-entry-accts{grid-column:2/4;font-size:10px;color:#5a5a52;font-family:'Courier New',monospace}
+.manual-entry-amount{font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.manual-entry-amount.debit{color:#e07070}
+.manual-entry-amount.credit{color:#8abe55}
+.del-btn{width:22px;height:22px;border-radius:5px;border:1px solid #2e2c29;background:transparent;cursor:pointer;color:#4a4945;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all 0.1s;padding:0;flex-shrink:0}
+.del-btn:hover{border-color:#8a3a3a;color:#e07070;background:#1a1010}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>CGD → hledger</h1>
+    <span class="header-sub">Caixadirecta movements importer</span>
+  </div>
+
+  <!-- Step 1: Import -->
+  <div id="step1" class="step active">
+    <div class="card">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept=".tsv,.csv,.txt">
+        <div class="drop-icon">📂</div>
+        <div class="drop-label">Drop your CGD export here</div>
+        <div class="drop-sub">TSV · Caixadirecta movements export</div>
+      </div>
+      <div class="divider">seed from journal</div>
+      <div class="drop-zone" id="journalDropZone" onclick="document.getElementById('journalInput').click()" style="padding:1.25rem 1.5rem">
+        <input type="file" id="journalInput" accept=".journal,.txt">
+        <div class="drop-label" style="font-size:13px" id="journalDropLabel">Drop your 2026.journal here</div>
+        <div class="drop-sub">Teaches the importer your past categorisations</div>
+      </div>
+    </div>
+
+    <!-- Manual entries on step 1 -->
+    <div class="card">
+      <div class="section-label">Manual entries</div>
+      <div class="manual-form">
+        <div>
+          <div class="field-label">Date</div>
+          <input class="field-input" id="mDate" type="date" style="color-scheme:dark">
+        </div>
+        <div>
+          <div class="field-label">Description</div>
+          <div class="desc-wrap">
+            <input class="field-input" id="mDesc" type="text" placeholder="e.g. Mercado local" autocomplete="off"
+              oninput="onDescInput()" onkeydown="onDescKeydown(event)" onblur="hideDescSuggestions()">
+            <div class="desc-suggestions" id="descSuggestions"></div>
+          </div>
+        </div>
+        <div>
+          <div class="field-label">Amount (EUR)</div>
+          <input class="field-input" id="mAmount" type="number" step="0.01" min="0" placeholder="0.00">
+        </div>
+      </div>
+      <div class="manual-form-full">
+        <div>
+          <div class="field-label">From account</div>
+          <button class="acct-btn" id="mFromBtn" onclick="openManualPicker('from', this)" style="width:100%">
+            <span class="acct-dot" id="mFromDot" style="background:#EF9F27"></span>
+            <span class="picker-icon" id="mFromIcon">💵</span>
+            <span class="acct-label" id="mFromLabel">assets:cash</span>
+            <span class="acct-chevron">▾</span>
+          </button>
+        </div>
+        <div>
+          <div class="field-label">To account</div>
+          <button class="acct-btn" id="mToBtn" onclick="openManualPicker('to', this)" style="width:100%">
+            <span class="acct-dot" id="mToDot" style="background:#E24B4A"></span>
+            <span class="picker-icon" id="mToIcon">🛒</span>
+            <span class="acct-label" id="mToLabel">expenses:food:groceries</span>
+            <span class="acct-chevron">▾</span>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-sm" onclick="addManualEntry()">+ Add entry</button>
+      <div class="manual-list" id="manualList"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: Review -->
+  <div id="step2" class="step">
+    <div class="card">
+      <div class="toolbar">
+        <button class="btn btn-sm" onclick="showStep(1)">← Back</button>
+        <span id="txCount" class="badge"></span>
+        <span id="approvedCount" class="badge-progress zero">0 approved</span>
+        <span id="aiStatus" class="badge-neutral"></span>
+        <button class="btn btn-primary" onclick="generateOutput()" style="margin-left:auto">Generate entries →</button>
+      </div>
+      <div id="statsBar" class="stats-row"></div>
+      <div class="section-label">Review & categorise</div>
+      <div class="tx-list" id="txList"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Output -->
+  <div id="step3" class="step">
+    <div class="card">
+      <div class="toolbar">
+        <button class="btn btn-sm" onclick="showStep(2)">← Back</button>
+        <button class="btn btn-primary" onclick="copyOutput()" id="copyBtn">Copy to clipboard</button>
+        <button class="btn btn-sm" onclick="downloadOutput()">Download .journal</button>
+      </div>
+      <div class="section-label" style="margin-bottom:0.5rem">Paste into your 2026.journal</div>
+      <div class="output-wrap">
+        <div class="output-box" id="outputBox"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Picker -->
+<div class="picker-overlay" id="overlay" style="display:none" onclick="closePicker()"></div>
+<div class="picker" id="picker" style="display:none">
+  <div class="picker-search-wrap">
+    <input class="picker-search" id="pickerSearch" placeholder="Search accounts…" autocomplete="off"
+      oninput="filterPicker()" onkeydown="pickerKeydown(event)">
+  </div>
+  <div class="picker-list" id="pickerList"></div>
+</div>
+
+<script>
+// ─── Account catalogue ───────────────────────────────────────────────────────
+const GROUPS = [
+  {label:"Food", color:"#E24B4A", items:[
+    {account:"expenses:food:groceries",           icon:"🛒", label:"Groceries"},
+    {account:"expenses:food:restaurants",         icon:"🍽️", label:"Restaurants"},
+  ]},
+  {label:"Transport", color:"#378ADD", items:[
+    {account:"expenses:transport:car:fuel",        icon:"⛽", label:"Fuel"},
+    {account:"expenses:transport:car:insurance",   icon:"🛡️", label:"Car insurance"},
+    {account:"expenses:transport:car:taxes",       icon:"📋", label:"Car taxes"},
+    {account:"expenses:transport:car:tolls",       icon:"🛣️", label:"Tolls"},
+    {account:"expenses:transport:car:parking",     icon:"🅿️", label:"Parking"},
+    {account:"expenses:transport:car:maintenance", icon:"🔧", label:"Car maintenance"},
+    {account:"expenses:transport:car:other",       icon:"🚗", label:"Car other"},
+    {account:"expenses:transport:flights",         icon:"✈️", label:"Flights"},
+    {account:"expenses:transport:other",           icon:"🚌", label:"Transport other"},
+  ]},
+  {label:"Health", color:"#1D9E75", items:[
+    {account:"expenses:health:pharmacy",  icon:"💊", label:"Pharmacy"},
+    {account:"expenses:health:dentist",   icon:"🦷", label:"Dentist"},
+    {account:"expenses:health:soccer",    icon:"⚽", label:"Soccer"},
+    {account:"expenses:health:swimming",  icon:"🏊", label:"Swimming"},
+    {account:"expenses:health:therapy",   icon:"🧠", label:"Therapy"},
+    {account:"expenses:health:skincare",  icon:"✨", label:"Skincare"},
+  ]},
+  {label:"Housing", color:"#7F77DD", items:[
+    {account:"expenses:housing", icon:"🏠", label:"Housing"},
+  ]},
+  {label:"Filipa", color:"#D4537E", items:[
+    {account:"expenses:filipa", icon:"❤️", label:"Filipa (general)"},
+  ]},
+  {label:"Work & Professional", color:"#EF9F27", items:[
+    {account:"expenses:professional",       icon:"💼", label:"Professional"},
+    {account:"expenses:telecommunications", icon:"📞", label:"Telecommunications"},
+    {account:"expenses:fees",               icon:"🏦", label:"Bank fees"},
+  ]},
+  {label:"Personal", color:"#B4B2A9", items:[
+    {account:"expenses:personal:clothing",    icon:"👕", label:"Clothing"},
+    {account:"expenses:personal:videogames",  icon:"🎮", label:"Video games"},
+    {account:"expenses:personal:boardgames",  icon:"♟️", label:"Board games"},
+    {account:"expenses:personal:music",       icon:"🎵", label:"Music"},
+    {account:"expenses:personal:books",       icon:"📖", label:"Books"},
+    {account:"expenses:personal:other",       icon:"👤", label:"Personal other"},
+  ]},
+  {label:"Education", color:"#AFA9EC", items:[
+    {account:"expenses:education:tuition", icon:"🎓", label:"Tuition"},
+    {account:"expenses:education:other",   icon:"📚", label:"Education other"},
+  ]},
+  {label:"Other expenses", color:"#888780", items:[
+    {account:"expenses:subscriptions", icon:"🔄", label:"Subscriptions"},
+    {account:"expenses:taxes",         icon:"🏛️", label:"Taxes"},
+    {account:"expenses:other",         icon:"📦", label:"Other"},
+  ]},
+  {label:"Income", color:"#97C459", items:[
+    {account:"income:salary",                    icon:"💰", label:"Salary"},
+    {account:"income:other",                     icon:"💵", label:"Income other"},
+    {account:"income:reimbursements:mae",        icon:"↩️", label:"Reimbursement · Mãe"},
+    {account:"income:reimbursements:pai",        icon:"↩️", label:"Reimbursement · Pai"},
+    {account:"income:reimbursements:larin",      icon:"↩️", label:"Reimbursement · Larin"},
+    {account:"income:reimbursements:inesiti",    icon:"↩️", label:"Reimbursement · Inesiti"},
+    {account:"income:reimbursements:filipa",     icon:"↩️", label:"Reimbursement · Filipa"},
+  ]},
+  {label:"Assets", color:"#EF9F27", items:[
+    {account:"assets:investments", icon:"📈", label:"Investments"},
+    {account:"assets:cash",        icon:"💵", label:"Cash (ATM withdrawal)"},
+  ]},
+];
+
+const ALL_ITEMS = GROUPS.flatMap(g => g.items.map(i => ({...i, color: g.color, groupLabel: g.label})));
+const ACCOUNT_SET = new Set(ALL_ITEMS.map(i => i.account));
+
+function getItem(account) {
+  return ALL_ITEMS.find(i => i.account === account) || {icon:"📦", label: account || "Uncategorised", color:"#888780"};
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let transactions = [], activeIdx = null, focusedItemIdx = 0, filteredItems = [];
+
+// ─── Steps ───────────────────────────────────────────────────────────────────
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+}
+
+// ─── File input ──────────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => parseTSV(ev.target.result);
+  r.readAsText(file, 'UTF-8');
+});
+
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => parseTSV(ev.target.result);
+  r.readAsText(file, 'UTF-8');
+});
+
+document.getElementById('journalInput').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => parseJournal(ev.target.result);
+  r.readAsText(file, 'UTF-8');
+});
+
+const jdz = document.getElementById('journalDropZone');
+jdz.addEventListener('dragover', e => { e.preventDefault(); jdz.classList.add('drag-over'); });
+jdz.addEventListener('dragleave', () => jdz.classList.remove('drag-over'));
+jdz.addEventListener('drop', e => {
+  e.preventDefault(); jdz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => parseJournal(ev.target.result);
+  r.readAsText(file, 'UTF-8');
+});
+
+// ─── Parse journal to seed history ───────────────────────────────────────────
+function parseJournal(text) {
+  const lines = text.split('\n');
+  let learned = 0;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    // Transaction header: "YYYY-MM-DD description"
+    const headerMatch = line.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/);
+    if (headerMatch) {
+      const desc = headerMatch[2].trim();
+      let customDesc = '';
+      let account = '';
+      i++;
+      // Read posting lines until blank or next header
+      while (i < lines.length) {
+        const posting = lines[i];
+        const trimmed = posting.trim();
+        if (!trimmed) break;
+        if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) break;
+        // Comment line: "; original bank desc"
+        if (trimmed.startsWith(';')) {
+          // The comment is the original bank desc, so the header desc is the custom one
+          customDesc = desc;
+        }
+        // Posting line with account — pick first non-assets:checking account
+        const postMatch = trimmed.match(/^([a-z][a-z0-9:]+)(\s+.*)?$/);
+        if (postMatch && postMatch[1] !== 'assets:checking' && ACCOUNT_SET.has(postMatch[1])) {
+          if (!account) account = postMatch[1];
+        }
+        i++;
+      }
+      if (account) {
+        let bankDesc = desc;
+        const blockStart = lines.indexOf(line);
+        for (let k = blockStart + 1; k < lines.length; k++) {
+          const t = lines[k].trim();
+          if (!t || /^\d{4}-\d{2}-\d{2}/.test(t)) break;
+          if (t.startsWith('; ')) { bankDesc = t.slice(2).trim(); break; }
+        }
+        recordHistory(bankDesc, customDesc || '', account);
+        learned++;
+      }
+    } else {
+      i++;
+    }
+  }
+  saveHistory();
+  refreshDescDatalist();
+  const label = document.getElementById('journalDropLabel');
+  label.textContent = `✓ Learned ${learned} merchant${learned !== 1 ? 's' : ''} from journal`;
+  document.getElementById('journalDropZone').style.borderColor = '#2a6a3a';
+}
+
+// ─── Parse ───────────────────────────────────────────────────────────────────
+function parseTSV(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const rows = [];
+  for (const line of lines) {
+    const cols = line.split('\t');
+    if (cols.length < 5) continue;
+    const dateRaw = cols[0].trim();
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(dateRaw)) continue;
+    const [d, m, y] = dateRaw.split('-');
+    const desc = cols[2].trim();
+    const debit  = parseFloat(cols[3].trim().replace(/\./g,'').replace(',','.')) || 0;
+    const credit = parseFloat(cols[4].trim().replace(/\./g,'').replace(',','.')) || 0;
+    const cgdCat = cols[7] ? cols[7].trim() : '';
+    if (!desc) continue;
+    rows.push({ date:`${y}-${m}-${d}`, desc, descCustom:'', debit, credit, cgdCat, account:'' });
+  }
+  if (!rows.length) { alert('No transactions found. Check the file format.'); return; }
+  // Pre-fill from history
+  let preApproved = 0;
+  rows.forEach(tx => {
+    const h = lookupHistory(tx.desc);
+    if (!h) return;
+    if (h.custom) tx.descCustom = h.custom;
+    if (h.account) tx.account = h.account;
+    if (isTrusted(h, tx.desc)) {
+      tx.approved = true;
+      preApproved++;
+    }
+    // if ambiguous or blocklisted, mark so UI can hint it
+    if (h.account && (isAmbiguous(h) || isBlocklisted(tx.desc))) {
+      tx.ambiguous = true;
+    }
+  });
+  transactions = rows;
+  renderTransactions();
+  updateStats();
+  showStep(2);
+  const unknown = transactions.filter(tx => !tx.account);
+  if (unknown.length) {
+    autoClassify(unknown);
+  } else {
+    const statusEl = document.getElementById('aiStatus');
+    statusEl.className = 'badge-success';
+    statusEl.textContent = `All ${preApproved} recognised from history`;
+  }
+}
+
+// ─── Stats bar ───────────────────────────────────────────────────────────────
+function updateStats() {
+  const totalDebit  = transactions.reduce((s,t) => s + t.debit,  0);
+  const totalCredit = transactions.reduce((s,t) => s + t.credit, 0);
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat"><span class="stat-label">Transactions</span><span class="stat-value neutral">${transactions.length}</span></div>
+    <div class="stat"><span class="stat-label">Total out</span><span class="stat-value debit">−${totalDebit.toFixed(2)} EUR</span></div>
+    <div class="stat"><span class="stat-label">Total in</span><span class="stat-value credit">+${totalCredit.toFixed(2)} EUR</span></div>
+    <div class="stat"><span class="stat-label">Net</span><span class="stat-value ${totalCredit-totalDebit>=0?'credit':'debit'}">${totalCredit-totalDebit>=0?'+':''}${(totalCredit-totalDebit).toFixed(2)} EUR</span></div>
+  `;
+}
+
+// ─── Render transaction list ──────────────────────────────────────────────────
+function renderTransactions() {
+  document.getElementById('txCount').textContent = `${transactions.length} transactions`;
+  document.getElementById('txList').innerHTML = transactions.map((tx, i) => {
+    const item = getItem(tx.account || '');
+    const isDebit = tx.debit > 0;
+    const displayDesc = tx.descCustom || tx.desc;
+    const hasCustom = !!tx.descCustom;
+    // Show suggestion chip only if: no custom desc yet, history has a custom for this desc
+    const h = !hasCustom ? lookupHistory(tx.desc) : null;
+    const suggestion = h && h.custom && h.custom !== tx.desc ? h.custom : null;
+    const ambiguousHint = tx.ambiguous
+      ? `<span class="tx-desc-ambiguous" title="This merchant has been categorised differently before — please confirm">⚠ ambiguous</span>`
+      : (h && !tx.approved && h.count > 0 && h.count < CONFIDENCE_THRESHOLD
+          ? `<span class="tx-desc-ambiguous" style="color:#5a6a5a" title="Seen ${h.count} time${h.count>1?'s':''} — needs ${CONFIDENCE_THRESHOLD - h.count} more to auto-approve">${h.count}/${CONFIDENCE_THRESHOLD} confirmations</span>`
+          : '');
+    return `<div class="tx-card${tx.approved ? ' approved' : ''}" id="txcard-${i}">
+      <span class="tx-date">${tx.date}</span>
+      <div class="tx-desc-wrap">
+        <span class="tx-desc" id="desc-${i}" title="Click to edit" onclick="startEditDesc(${i})">${esc(displayDesc)}</span>
+        ${hasCustom ? `<span class="tx-desc-orig" title="Original: ${esc(tx.desc)}">${esc(tx.desc)}</span>` : ''}
+        ${suggestion ? `<span class="tx-desc-suggestion" title="Apply suggestion from history" onclick="applySuggestion(${i},'${esc(suggestion)}')">${esc(suggestion)}</span>` : ''}
+        ${ambiguousHint}
+      </div>
+      <span class="tx-amount ${isDebit ? 'debit' : 'credit'}">${isDebit ? '−' : '+'}${(isDebit ? tx.debit : tx.credit).toFixed(2)}</span>
+      <button class="check-btn${tx.approved ? ' checked' : ''}" id="chk-${i}" onclick="toggleApproved(${i})" title="${tx.approved ? 'Mark as pending' : 'Approve'}">✓</button>
+      <button class="acct-btn" id="abtn-${i}" onclick="openPicker(${i}, this)">
+        <span class="acct-dot" style="background:${item.color}"></span>
+        <span class="picker-icon">${item.icon}</span>
+        <span class="acct-label">${item.label}</span>
+        <span class="acct-chevron">▾</span>
+      </button>
+    </div>`;
+  }).join('');
+  updateApprovedCount();
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Picker ───────────────────────────────────────────────────────────────────
+// activeIdx = transaction index (null if manual), activeManualTarget = 'from'|'to'|null
+let activeManualTarget = null;
+
+function openPicker(idx, btn) {
+  activeIdx = idx; activeManualTarget = null; focusedItemIdx = 0;
+  document.getElementById('pickerSearch').value = '';
+  filterPicker();
+  positionPicker(btn);
+}
+
+function openManualPicker(target, btn) {
+  activeIdx = null; activeManualTarget = target; focusedItemIdx = 0;
+  document.getElementById('pickerSearch').value = '';
+  filterPicker();
+  positionPicker(btn);
+}
+
+function positionPicker(btn) {
+  const picker = document.getElementById('picker');
+  const rect = btn.getBoundingClientRect();
+  picker.style.display = 'flex';
+  picker.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
+  const spaceBelow = window.innerHeight - rect.bottom;
+  if (spaceBelow >= 430 || spaceBelow > rect.top) {
+    picker.style.top  = (rect.bottom + 5) + 'px';
+    picker.style.bottom = 'auto';
+  } else {
+    picker.style.bottom = (window.innerHeight - rect.top + 5) + 'px';
+    picker.style.top = 'auto';
+  }
+  document.getElementById('overlay').style.display = 'block';
+  setTimeout(() => document.getElementById('pickerSearch').focus(), 10);
+}
+
+function highlight(text, query) {
+  if (!query) return esc(text);
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx < 0) return esc(text);
+  return esc(text.slice(0, idx)) + '<mark>' + esc(text.slice(idx, idx + query.length)) + '</mark>' + esc(text.slice(idx + query.length));
+}
+
+function filterPicker() {
+  const q = document.getElementById('pickerSearch').value.trim().toLowerCase();
+  let current = '';
+  if (activeIdx !== null) current = transactions[activeIdx].account;
+  else if (activeManualTarget === 'from') current = document.getElementById('mFromLabel').textContent;
+  else if (activeManualTarget === 'to')   current = document.getElementById('mToLabel').textContent;
+  const list = document.getElementById('pickerList');
+  focusedItemIdx = 0;
+
+  // For manual 'from', also include asset accounts at top
+  const extraGroups = activeManualTarget === 'from' ? [{
+    label:'Assets', color:'#EF9F27',
+    items:[
+      {account:'assets:cash',     icon:'💵', label:'Cash',     color:'#EF9F27'},
+      {account:'assets:checking', icon:'🏦', label:'Checking', color:'#EF9F27'},
+    ]
+  }] : [];
+  const groups = activeManualTarget === 'from' ? [...extraGroups, ...GROUPS] : GROUPS;
+  const allItems = activeManualTarget === 'from'
+    ? [...extraGroups.flatMap(g=>g.items.map(i=>({...i,groupLabel:g.label}))), ...ALL_ITEMS]
+    : ALL_ITEMS;
+
+  if (!q) {
+    filteredItems = [];
+    list.innerHTML = groups.map(g =>
+      `<div class="picker-group-label" style="color:${g.color}">${g.label}</div>` +
+      g.items.map(item =>
+        `<div class="picker-item ${item.account === current ? 'selected' : ''}" onclick="selectAccount(${activeIdx},'${item.account}')">
+          <span class="picker-icon">${item.icon}</span>
+          <span style="flex:1">${item.label}</span>
+          <span class="picker-acct" style="color:#4a4945">${item.account}</span>
+        </div>`
+      ).join('')
+    ).join('');
+  } else {
+    filteredItems = allItems.filter(i =>
+      i.label.toLowerCase().includes(q) ||
+      i.account.toLowerCase().includes(q) ||
+      (i.groupLabel||'').toLowerCase().includes(q)
+    );
+    list.innerHTML = filteredItems.length
+      ? filteredItems.map((item, fi) =>
+          `<div class="picker-item ${fi === 0 ? 'focused' : ''} ${item.account === current ? 'selected' : ''}" id="pitem-${fi}" onclick="selectAccount(${activeIdx},'${item.account}')">
+            <span class="picker-icon">${item.icon}</span>
+            <span style="flex:1">${highlight(item.label, q)}</span>
+            <span class="picker-acct" style="color:${item.color}">${item.groupLabel}</span>
+          </div>`
+        ).join('')
+      : '<div class="picker-empty">No matches</div>';
+  }
+}
+
+function pickerKeydown(e) {
+  if (e.key === 'Escape') { closePicker(); return; }
+  if (e.key === 'Enter') {
+    if (filteredItems.length > 0 && focusedItemIdx < filteredItems.length)
+      selectAccount(activeIdx, filteredItems[focusedItemIdx].account);
+    return;
+  }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = document.getElementById('pitem-' + focusedItemIdx);
+    if (prev) prev.classList.remove('focused');
+    if (e.key === 'ArrowDown') focusedItemIdx = Math.min(focusedItemIdx + 1, filteredItems.length - 1);
+    else focusedItemIdx = Math.max(focusedItemIdx - 1, 0);
+    const next = document.getElementById('pitem-' + focusedItemIdx);
+    if (next) { next.classList.add('focused'); next.scrollIntoView({block:'nearest'}); }
+  }
+}
+
+function toggleApproved(idx) {
+  transactions[idx].approved = !transactions[idx].approved;
+  const card = document.getElementById('txcard-' + idx);
+  const btn  = document.getElementById('chk-' + idx);
+  card.classList.toggle('approved', transactions[idx].approved);
+  btn.classList.toggle('checked',   transactions[idx].approved);
+  btn.title = transactions[idx].approved ? 'Mark as pending' : 'Approve';
+  updateApprovedCount();
+}
+
+function updateApprovedCount() {
+  const n = transactions.filter(t => t.approved).length;
+  const el = document.getElementById('approvedCount');
+  el.textContent = `${n} / ${transactions.length} approved`;
+  el.className = n === 0 ? 'badge-progress zero' : 'badge-progress';
+}
+
+function applySuggestion(idx, suggested) {
+  transactions[idx].descCustom = suggested;
+  recordHistory(transactions[idx].desc, suggested, transactions[idx].account);
+  // re-render just desc area
+  const wrap = document.getElementById('desc-' + idx).closest('.tx-desc-wrap');
+  const span = document.getElementById('desc-' + idx);
+  span.textContent = suggested;
+  // remove suggestion chip
+  wrap.querySelectorAll('.tx-desc-suggestion').forEach(el => el.remove());
+  // add/update orig line
+  let orig = wrap.querySelector('.tx-desc-orig');
+  if (!orig) { orig = document.createElement('span'); orig.className = 'tx-desc-orig'; wrap.appendChild(orig); }
+  orig.title = 'Original: ' + transactions[idx].desc;
+  orig.textContent = transactions[idx].desc;
+}
+
+function startEditDesc(idx) {
+  const span = document.getElementById('desc-' + idx);
+  if (!span) return;
+  const current = transactions[idx].descCustom || transactions[idx].desc;
+  const input = document.createElement('input');
+  input.className = 'tx-desc-input';
+  input.value = current;
+  input.style.width = span.offsetWidth + 'px';
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+  function commit() {
+    const val = input.value.trim();
+    const isCustom = val && val !== transactions[idx].desc;
+    transactions[idx].descCustom = isCustom ? val : '';
+    if (isCustom) recordHistory(transactions[idx].desc, val, transactions[idx].account);
+    const wrap = input.closest('.tx-desc-wrap');
+    const newSpan = document.createElement('span');
+    newSpan.className = 'tx-desc';
+    newSpan.id = 'desc-' + idx;
+    newSpan.title = 'Click to edit';
+    newSpan.setAttribute('onclick', `startEditDesc(${idx})`);
+    newSpan.textContent = transactions[idx].descCustom || transactions[idx].desc;
+    input.replaceWith(newSpan);
+    // orig line
+    let orig = wrap.querySelector('.tx-desc-orig');
+    if (transactions[idx].descCustom) {
+      if (!orig) { orig = document.createElement('span'); orig.className = 'tx-desc-orig'; wrap.appendChild(orig); }
+      orig.title = 'Original: ' + transactions[idx].desc;
+      orig.textContent = transactions[idx].desc;
+    } else {
+      if (orig) orig.remove();
+    }
+    // remove suggestion chip once manually edited
+    wrap.querySelectorAll('.tx-desc-suggestion').forEach(el => el.remove());
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = transactions[idx].descCustom || transactions[idx].desc; input.blur(); }
+  });
+}
+
+function selectAccount(idx, account) {
+  // Manual picker target
+  if (activeManualTarget) {
+    const prefix = activeManualTarget === 'from' ? 'mFrom' : 'mTo';
+    const item = account === 'assets:cash'     ? {icon:'💵', label:'Cash',     color:'#EF9F27'} :
+                 account === 'assets:checking'  ? {icon:'🏦', label:'Checking', color:'#EF9F27'} :
+                 getItem(account);
+    document.getElementById(prefix + 'Dot').style.background = item.color;
+    document.getElementById(prefix + 'Icon').textContent     = item.icon;
+    document.getElementById(prefix + 'Label').textContent    = account;
+    closePicker();
+    return;
+  }
+  // Transaction picker
+  transactions[idx].account = account;
+  transactions[idx].approved = true;
+  recordHistory(transactions[idx].desc, transactions[idx].descCustom, account);
+  const item = getItem(account);
+  document.getElementById('abtn-' + idx).innerHTML =
+    `<span class="acct-dot" style="background:${item.color}"></span>
+     <span class="picker-icon">${item.icon}</span>
+     <span class="acct-label">${item.label}</span>
+     <span class="acct-chevron">▾</span>`;
+  const card = document.getElementById('txcard-' + idx);
+  const btn  = document.getElementById('chk-' + idx);
+  card.classList.add('approved');
+  btn.classList.add('checked');
+  btn.title = 'Mark as pending';
+  updateApprovedCount();
+  closePicker();
+}
+
+function closePicker() {
+  document.getElementById('picker').style.display = 'none';
+  document.getElementById('overlay').style.display = 'none';
+  activeIdx = null;
+  activeManualTarget = null;
+}
+
+// ─── Description history (localStorage) ──────────────────────────────────────
+// Stored as: { [bankDesc]: { custom: string, account: string, count: number, accounts: {[acct]: number} } }
+
+const AMBIGUOUS_BLOCKLIST = [
+  'paypal', 'mb way', 'mbway', 'revolut', 'wise', 'stripe',
+  'google pay', 'apple pay', 'transferencia', 'transferência'
+];
+const CONFIDENCE_THRESHOLD = 5; // min confirmations before auto-approve
+const CONFLICT_THRESHOLD   = 3; // distinct accounts before flagged ambiguous
+
+function isBlocklisted(bankDesc) {
+  const d = bankDesc.toLowerCase();
+  return AMBIGUOUS_BLOCKLIST.some(b => d.includes(b));
+}
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem('cgd_desc_history') || '{}'); } catch { return {}; }
+}
+function saveHistory() {
+  try { localStorage.setItem('cgd_desc_history', JSON.stringify(descHistory)); } catch {}
+}
+
+function recordHistory(bankDesc, custom, account) {
+  if (!bankDesc || !account) return;
+  const key = bankDesc.trim().toUpperCase();
+  const existing = descHistory[key] || { custom:'', account:'', count:0, accounts:{} };
+  const accounts = existing.accounts || {};
+  accounts[account] = (accounts[account] || 0) + 1;
+  descHistory[key] = {
+    custom:   custom || existing.custom,
+    account:  account,
+    count:    existing.count + 1,
+    accounts
+  };
+  saveHistory();
+  refreshDescDatalist();
+}
+
+function isAmbiguous(entry) {
+  if (!entry || !entry.accounts) return false;
+  return Object.keys(entry.accounts).length >= CONFLICT_THRESHOLD;
+}
+
+function isTrusted(entry, bankDesc) {
+  if (!entry || !entry.account) return false;
+  if (isBlocklisted(bankDesc))  return false;
+  if (isAmbiguous(entry))       return false;
+  if (entry.count < CONFIDENCE_THRESHOLD) return false;
+  return true;
+}
+
+// Fuzzy: find best match from history for a bank desc
+function lookupHistory(bankDesc) {
+  const key = bankDesc.trim().toUpperCase();
+  if (descHistory[key]) return descHistory[key];
+  let best = null, bestLen = 0;
+  for (const [k, v] of Object.entries(descHistory)) {
+    if (key.includes(k) || k.includes(key)) {
+      if (k.length > bestLen) { bestLen = k.length; best = v; }
+    }
+  }
+  return best;
+}
+
+let descHistory = loadHistory();
+function guessAccount(desc, cgdCat) {
+  const d = desc.toLowerCase();
+  if (/salary|salario|vencimento|ordenado/.test(d))             return 'income:salary';
+  if (/atm|levantamento|multibanco.*lev/.test(d))               return 'assets:cash';
+  if (/ubereats|uber eats|bolt food|glovo|takeaway/.test(d))   return 'expenses:food:restaurants';
+  if (/continente|pingo doce|lidl|aldi|minipreço|intermarche|mercado|supermercado/.test(d)) return 'expenses:food:groceries';
+  if (/netflix|spotify|hbo|disney|apple.*sub|youtube premium/.test(d)) return 'expenses:subscriptions';
+  if (/repsol|bp |galp|shell|combustivel/.test(d))              return 'expenses:transport:car:fuel';
+  if (/via verde|portagem|toll/.test(d))                        return 'expenses:transport:car:tolls';
+  if (/parking|parque/.test(d))                                 return 'expenses:transport:car:parking';
+  if (/farmacia|pharmacy|farma/.test(d))                        return 'expenses:health:pharmacy';
+  if (/dentist|dentista/.test(d))                               return 'expenses:health:dentist';
+  if (/seguro.*auto|insurance.*car/.test(d))                    return 'expenses:transport:car:insurance';
+  if (/tap |ryanair|easyjet|vueling/.test(d))                   return 'expenses:transport:flights';
+  if (/comissao|comissão|taxa servico|fee/.test(d))             return 'expenses:fees';
+  if (/vodafone|nos |meo |nowo/.test(d))                        return 'expenses:telecommunications';
+  if (/steam|playstation|xbox|nintendo|epic games/.test(d))     return 'expenses:personal:videogames';
+  if (/livraria|fnac|book/.test(d))                             return 'expenses:personal:books';
+  if (cgdCat.toLowerCase() === 'compras')                       return 'expenses:personal:other';
+  return 'expenses:other';
+}
+
+// ─── AI classify ──────────────────────────────────────────────────────────────
+async function autoClassify(unknownSubset) {
+  const statusEl = document.getElementById('aiStatus');
+  const preApproved = transactions.filter(tx => tx.approved).length;
+  const toProcess = unknownSubset || transactions;
+
+  if (!toProcess.length) return;
+
+  statusEl.className = 'badge-neutral';
+  statusEl.innerHTML = `<span class="spinner"></span>AI classifying ${toProcess.length} new…`;
+
+  const toClassify = toProcess.map((tx) => ({
+    i: transactions.indexOf(tx),
+    desc: tx.desc,
+    ...(tx.descCustom ? {descCustom: tx.descCustom} : {}),
+    cgdCat: tx.cgdCat,
+    isCredit: tx.credit > 0
+  }));
+  const accountList = ALL_ITEMS.map(i => i.account);
+
+  try {
+    const prompt = `Classify Portuguese bank transactions into hledger accounts.
+
+Available accounts:
+${accountList.join('\n')}
+
+Rules:
+- ATM withdrawals, levantamentos → assets:cash
+- Salary/wage/vencimento/ordenado → income:salary
+- Reimbursements from known people → income:reimbursements:name (mae/pai/larin/inesiti/filipa)
+- Uber Eats, Bolt Food, Glovo → expenses:food:restaurants
+- Continente, Pingo Doce, Lidl, Aldi, supermarkets → expenses:food:groceries
+- Airlines (TAP, Ryanair, Easyjet) → expenses:transport:flights
+- Fuel (Galp, BP, Repsol, Shell) → expenses:transport:car:fuel
+- Via Verde, portagens, tolls → expenses:transport:car:tolls
+- Parking → expenses:transport:car:parking
+- Streaming (Netflix, Spotify, HBO, Disney, Apple, YouTube) → expenses:subscriptions
+- Pharmacies, farmacias → expenses:health:pharmacy
+- Dentist → expenses:health:dentist
+- Telecom (Vodafone, NOS, MEO, Nowo) → expenses:telecommunications
+- Bank fees, comissões → expenses:fees
+- Steam, PlayStation, Xbox, Nintendo, Epic → expenses:personal:videogames
+- Books, Livraria, FNAC → expenses:personal:books
+- Clothing → expenses:personal:clothing
+- Generic purchases → expenses:personal:other
+
+Return ONLY a JSON array with objects {i, account}. No markdown, no explanation.
+Note: some transactions include a "descCustom" field — that's the user's own label for that transaction, use it as a strong signal.
+
+Transactions: ${JSON.stringify(toClassify)}`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{role:'user', content: prompt}]
+      })
+    });
+    const data = await resp.json();
+    const raw = data.content[0].text.replace(/```json|```/g,'').trim();
+    const results = JSON.parse(raw);
+    let applied = 0;
+    results.forEach(r => {
+      if (transactions[r.i] && ACCOUNT_SET.has(r.account)) {
+        transactions[r.i].account = r.account;
+        applied++;
+      }
+    });
+    const parts = [];
+    if (preApproved) parts.push(`${preApproved} from history`);
+    if (applied)     parts.push(`${applied} by AI`);
+    statusEl.className = 'badge-success';
+    statusEl.textContent = parts.join(' · ');
+  } catch (e) {
+    toProcess.forEach(tx => { if (!tx.account) tx.account = guessAccount(tx.desc, tx.cgdCat); });
+    statusEl.className = 'badge-warn';
+    const parts = [];
+    if (preApproved) parts.push(`${preApproved} from history`);
+    parts.push('rule-based fallback');
+    statusEl.textContent = parts.join(' · ');
+  }
+  renderTransactions();
+}
+
+// ─── Manual entries ───────────────────────────────────────────────────────────
+let manualEntries = [];
+
+// init default date on load and populate desc suggestions
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
+  refreshDescDatalist();
+});
+
+function refreshDescDatalist() {} // no-op, kept for recordHistory calls
+
+let descSuggFocused = -1;
+
+function getDescHistory() {
+  return [...new Set(
+    Object.values(descHistory).map(h => h.custom).filter(Boolean)
+  )].sort();
+}
+
+function onDescInput() {
+  const q = document.getElementById('mDesc').value.trim().toLowerCase();
+  const box = document.getElementById('descSuggestions');
+  descSuggFocused = -1;
+  if (!q) { box.classList.remove('open'); box.innerHTML = ''; return; }
+  const matches = getDescHistory().filter(c => c.toLowerCase().includes(q)).slice(0, 8);
+  if (!matches.length) { box.classList.remove('open'); box.innerHTML = ''; return; }
+  box.innerHTML = matches.map((c, i) =>
+    `<div class="desc-suggestion-item" data-val="${esc(c)}" onmousedown="applyDescSuggestion('${esc(c)}')">${esc(c)}</div>`
+  ).join('');
+  box.classList.add('open');
+}
+
+function onDescKeydown(e) {
+  const box = document.getElementById('descSuggestions');
+  const items = box.querySelectorAll('.desc-suggestion-item');
+  if (!box.classList.contains('open') || !items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (descSuggFocused >= 0) items[descSuggFocused].classList.remove('focused');
+    descSuggFocused = Math.min(descSuggFocused + 1, items.length - 1);
+    items[descSuggFocused].classList.add('focused');
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (descSuggFocused >= 0) items[descSuggFocused].classList.remove('focused');
+    descSuggFocused = Math.max(descSuggFocused - 1, 0);
+    items[descSuggFocused].classList.add('focused');
+  } else if (e.key === 'Enter' && descSuggFocused >= 0) {
+    e.preventDefault();
+    applyDescSuggestion(items[descSuggFocused].dataset.val);
+  } else if (e.key === 'Escape') {
+    hideDescSuggestions();
+  }
+}
+
+function applyDescSuggestion(val) {
+  document.getElementById('mDesc').value = val;
+  hideDescSuggestions();
+  document.getElementById('mAmount').focus();
+}
+
+function hideDescSuggestions() {
+  // small delay so mousedown on item fires first
+  setTimeout(() => {
+    const box = document.getElementById('descSuggestions');
+    if (box) { box.classList.remove('open'); box.innerHTML = ''; }
+    descSuggFocused = -1;
+  }, 120);
+}
+
+function addManualEntry() {
+  const date   = document.getElementById('mDate').value;
+  const desc   = document.getElementById('mDesc').value.trim();
+  const amount = parseFloat(document.getElementById('mAmount').value);
+  const from   = document.getElementById('mFromLabel').textContent;
+  const to     = document.getElementById('mToLabel').textContent;
+
+  if (!date)              { alert('Please enter a date.'); return; }
+  if (!desc)              { alert('Please enter a description.'); return; }
+  if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
+  if (from === to)        { alert('From and To accounts must be different.'); return; }
+
+  manualEntries.push({ date, desc, amount, from, to });
+  document.getElementById('mDesc').value   = '';
+  document.getElementById('mAmount').value = '';
+  renderManualList();
+}
+
+function removeManualEntry(idx) {
+  manualEntries.splice(idx, 1);
+  renderManualList();
+}
+
+function renderManualList() {
+  const list = document.getElementById('manualList');
+  if (!manualEntries.length) { list.innerHTML = ''; return; }
+  list.innerHTML =
+    `<div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+       <button class="btn btn-sm" id="copyManualBtn" onclick="copyManualEntries()">Copy entries</button>
+     </div>` +
+    manualEntries.map((e, i) => {
+      const isAssetFrom = e.from.startsWith('assets');
+      return `<div class="manual-entry">
+        <span class="manual-entry-date">${e.date}</span>
+        <span class="manual-entry-desc">${esc(e.desc)}</span>
+        <span class="manual-entry-amount ${isAssetFrom ? 'debit' : 'credit'}">
+          ${isAssetFrom ? '−' : '+'}${e.amount.toFixed(2)}
+        </span>
+        <button class="del-btn" onclick="removeManualEntry(${i})" title="Remove">×</button>
+        <span class="manual-entry-accts">${e.from} → ${e.to}</span>
+      </div>`;
+    }).join('');
+}
+
+function copyManualEntries() {
+  const lines = [];
+  [...manualEntries].sort((a,b) => a.date.localeCompare(b.date)).forEach(e => {
+    lines.push(`${e.date} ${e.desc}`);
+    lines.push(`    ${e.to.padEnd(48)}${e.amount.toFixed(2)} EUR`);
+    lines.push(`    ${e.from}`);
+    lines.push('');
+  });
+  const text = lines.join('\n').trim();
+  const btn = document.getElementById('copyManualBtn');
+  function onSuccess() {
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => btn.textContent = 'Copy entries', 2000);
+  }
+  function fallback() {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); onSuccess(); } catch { btn.textContent = 'Copy failed'; }
+    document.body.removeChild(ta);
+  }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(onSuccess).catch(fallback);
+  else fallback();
+}
+// ─── Generate output ──────────────────────────────────────────────────────────
+function generateOutput() {
+  const lines = [];
+
+  // Combine CGD + manual, sort by date
+  const all = [
+    ...transactions.map(tx => ({ _type:'cgd', tx })),
+    ...manualEntries.map(e  => ({ _type:'manual', e }))
+  ].sort((a, b) => {
+    const da = a._type === 'cgd' ? a.tx.date : a.e.date;
+    const db = b._type === 'cgd' ? b.tx.date : b.e.date;
+    return da.localeCompare(db);
+  });
+
+  for (const item of all) {
+    if (item._type === 'cgd') {
+      const tx   = item.tx;
+      const acct = tx.account || 'expenses:other';
+      const desc = tx.descCustom || tx.desc;
+      if (tx.debit > 0) {
+        lines.push(`${tx.date} ${desc}`);
+        if (tx.descCustom) lines.push(`    ; ${tx.desc}`);
+        lines.push(`    ${acct.padEnd(48)}${tx.debit.toFixed(2)} EUR`);
+        lines.push(`    assets:checking`);
+      } else if (tx.credit > 0) {
+        lines.push(`${tx.date} ${desc}`);
+        if (tx.descCustom) lines.push(`    ; ${tx.desc}`);
+        lines.push(`    assets:checking                                 ${tx.credit.toFixed(2)} EUR`);
+        lines.push(`    ${acct}`);
+      }
+    } else {
+      const e = item.e;
+      lines.push(`${e.date} ${e.desc}`);
+      lines.push(`    ${e.to.padEnd(48)}${e.amount.toFixed(2)} EUR`);
+      lines.push(`    ${e.from}`);
+    }
+    lines.push('');
+  }
+
+  document.getElementById('outputBox').textContent = lines.join('\n').trim();
+  showStep(3);
+}
+
+// ─── Copy / download ──────────────────────────────────────────────────────────
+function copyOutput() {
+  const text = document.getElementById('outputBox').textContent;
+  const btn = document.getElementById('copyBtn');
+
+  function onSuccess() {
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => btn.textContent = 'Copy to clipboard', 2000);
+  }
+
+  function fallback() {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      onSuccess();
+    } catch(e) {
+      btn.textContent = 'Copy failed — use Download';
+      setTimeout(() => btn.textContent = 'Copy to clipboard', 3000);
+    }
+    document.body.removeChild(ta);
+  }
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+function downloadOutput() {
+  const text = document.getElementById('outputBox').textContent;
+  const blob = new Blob([text], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cgd-import.journal';
+  a.click();
+}
+</script>
+</body>
+</html>
